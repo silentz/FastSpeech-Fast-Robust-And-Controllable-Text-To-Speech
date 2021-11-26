@@ -19,6 +19,7 @@ class MultiHeadSelfAttention(nn.Module):
         self._key    = nn.Linear(embedding_dim, head_dim * n_heads)
         self._value  = nn.Linear(embedding_dim, head_dim * n_heads)
         self._concat = nn.Linear(n_heads * head_dim, embedding_dim)
+        self._norm   = nn.LayerNorm(embedding_dim)
         self._scale  = math.sqrt(head_dim)
 
 
@@ -53,4 +54,22 @@ class MultiHeadSelfAttention(nn.Module):
         mixture = mixture.reshape(batch_size, seq_len, -1)      # batch, seq, n_heads * head_dim
         mixture = self._concat(mixture)                         # batch, seq, dim
 
-        return mixture
+        result = self._norm(mixture + input)
+        return result
+
+
+class FFTBlock(nn.Module):
+
+    def __init__(self, embedding_dim: int,
+                       n_heads: int,
+                       head_dim: int):
+        super().__init__()
+
+        self._attention = MultiHeadSelfAttention(
+                embedding_dim=embedding_dim,
+                n_heads=n_heads,
+                head_dim=head_dim,
+            )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        stage_1 = self._attention(input)
