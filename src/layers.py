@@ -122,3 +122,41 @@ class LengthRegulator(nn.Module):
         patched_dur = torch.round(self.alpha * durations).long()
         result = input.repeat_interleave(patched_dur, dim=1)
         return result
+
+
+class Transpose(nn.Module):
+
+    def __init__(self, dim1: int, dim2: int):
+        super().__init__()
+        self.dim1 = dim1
+        self.dim2 = dim2
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return torch.transpose(input, self.dim1, self.dim2)
+
+
+class DurationPredictor(nn.Module):
+
+    def __init__(self, embedding_dim: int,
+                       hidden_size: int,
+                       kernel_size_1: int = 3,
+                       kernel_size_2: int = 3):
+        super().__init__()
+
+        self._layers = nn.Sequential(
+                Transpose(1, 2),
+                nn.Conv1d(embedding_dim, hidden_size, kernel_size_1, padding='same'),
+                Transpose(1, 2),
+                nn.LayerNorm(hidden_size),
+                nn.ReLU(inplace=True),
+                Transpose(1, 2),
+                nn.Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
+                Transpose(1, 2),
+                nn.LayerNorm(hidden_size),
+                nn.ReLU(inplace=True),
+                nn.Linear(hidden_size, 1),
+                nn.ReLU(inplace=True),
+            )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self._layers(input).squeeze(dim=2)
