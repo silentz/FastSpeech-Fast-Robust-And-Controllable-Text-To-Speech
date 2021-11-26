@@ -110,3 +110,15 @@ class FFTBlock(nn.Module):
         stage_1 = self._attention(input)
         stage_2 = self._conv(stage_1)
         return stage_2
+
+
+class LengthRegulator(nn.Module):
+
+    def __init__(self, alpha: float = 1.):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, input: torch.Tensor, durations: torch.LongTensor) -> torch.Tensor:
+        patched_dur = torch.round(self.alpha * durations).long()
+        result = input.repeat_interleave(patched_dur, dim=1)
+        return result
