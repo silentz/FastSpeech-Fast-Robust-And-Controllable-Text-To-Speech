@@ -58,18 +58,55 @@ class MultiHeadSelfAttention(nn.Module):
         return result
 
 
+class ConvBlock(nn.Module):
+
+    def __init__(self, input_size: int,
+                       hidden_size: int,
+                       kernel_size_1: int,
+                       kernel_size_2: int):
+        super().__init__()
+
+        self._layers = nn.Sequential(
+                nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                nn.ReLU(inplace=True),
+                nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
+            )
+
+        self._norm = nn.LayerNorm(input_size)
+
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        X = input.transpose(1, 2)
+        X = self._layers(X)
+        X = X.transpose(1, 2)
+        result = self._norm(input + X)
+        return result
+
+
 class FFTBlock(nn.Module):
 
     def __init__(self, embedding_dim: int,
-                       n_heads: int,
-                       head_dim: int):
+                       attention_n_heads: int,
+                       attention_head_dim: int,
+                       conv_hidden_size: int,
+                       conv_kernel_size_1: int = 3,
+                       conv_kernel_size_2: int = 3):
         super().__init__()
 
         self._attention = MultiHeadSelfAttention(
                 embedding_dim=embedding_dim,
-                n_heads=n_heads,
-                head_dim=head_dim,
+                n_heads=attention_n_heads,
+                head_dim=attention_head_dim,
+            )
+
+        self._conv = ConvBlock(
+                input_size=embedding_dim,
+                hidden_size=conv_hidden_size,
+                kernel_size_1=conv_kernel_size_1,
+                kernel_size_2=conv_kernel_size_2,
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         stage_1 = self._attention(input)
+        stage_2 = self._conv(stage_1)
+        return stage_2
