@@ -8,19 +8,21 @@ class MultiHeadSelfAttention(nn.Module):
 
     def __init__(self, embedding_dim: int,
                        n_heads: int,
-                       head_dim: int):
+                       head_dim: int,
+                       dropout: float):
         super().__init__()
 
         self.embedding_dim = embedding_dim
         self.n_heads = n_heads
         self.head_dim = head_dim
 
-        self._query  = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._key    = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._value  = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._concat = nn.Linear(n_heads * head_dim, embedding_dim)
-        self._norm   = nn.LayerNorm(embedding_dim)
-        self._scale  = math.sqrt(head_dim)
+        self._query   = nn.Linear(embedding_dim, head_dim * n_heads)
+        self._key     = nn.Linear(embedding_dim, head_dim * n_heads)
+        self._value   = nn.Linear(embedding_dim, head_dim * n_heads)
+        self._concat  = nn.Linear(n_heads * head_dim, embedding_dim)
+        self._norm    = nn.LayerNorm(embedding_dim)
+        self._dropout = nn.Dropout(dropout)
+        self._scale   = math.sqrt(head_dim)
 
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -53,6 +55,7 @@ class MultiHeadSelfAttention(nn.Module):
         mixture = mixture.transpose(1, 2)                       # batch, seq, n_heads, head_dim
         mixture = mixture.reshape(batch_size, seq_len, -1)      # batch, seq, n_heads * head_dim
         mixture = self._concat(mixture)                         # batch, seq, dim
+        mixture = self._dropout(mixture)                        # batch, seq, dim
 
         result = self._norm(mixture + input)
         return result
@@ -62,6 +65,7 @@ class ConvBlock(nn.Module):
 
     def __init__(self, input_size: int,
                        hidden_size: int,
+                       dropout: float,
                        kernel_size_1: int,
                        kernel_size_2: int):
         super().__init__()
@@ -73,12 +77,14 @@ class ConvBlock(nn.Module):
             )
 
         self._norm = nn.LayerNorm(input_size)
+        self._dropout = nn.Dropout(dropout)
 
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         X = input.transpose(1, 2)
         X = self._layers(X)
         X = X.transpose(1, 2)
+        X = self._dropout(X)
         result = self._norm(input + X)
         return result
 
@@ -88,6 +94,7 @@ class FFTBlock(nn.Module):
     def __init__(self, embedding_dim: int,
                        attention_n_heads: int,
                        attention_head_dim: int,
+                       dropout: float,
                        conv_hidden_size: int,
                        conv_kernel_size_1: int = 3,
                        conv_kernel_size_2: int = 3):
@@ -97,11 +104,13 @@ class FFTBlock(nn.Module):
                 embedding_dim=embedding_dim,
                 n_heads=attention_n_heads,
                 head_dim=attention_head_dim,
+                dropout=dropout,
             )
 
         self._conv = ConvBlock(
                 input_size=embedding_dim,
                 hidden_size=conv_hidden_size,
+                dropout=dropout,
                 kernel_size_1=conv_kernel_size_1,
                 kernel_size_2=conv_kernel_size_2,
             )
@@ -139,6 +148,7 @@ class DurationPredictor(nn.Module):
 
     def __init__(self, embedding_dim: int,
                        hidden_size: int,
+                       dropout: float,
                        kernel_size_1: int = 3,
                        kernel_size_2: int = 3):
         super().__init__()
@@ -150,10 +160,12 @@ class DurationPredictor(nn.Module):
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
                 Transpose(1, 2),
+                nn.Dropout(dropout),
                 nn.Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
                 Transpose(1, 2),
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1),
                 nn.ReLU(inplace=True),
             )
