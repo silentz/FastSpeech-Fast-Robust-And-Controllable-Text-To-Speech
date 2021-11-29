@@ -31,5 +31,6 @@ if __name__ == '__main__':
         result[start_idx:start_idx+32, :cur_len] = tensors
         start_idx += 32
 
+    result = result.cpu()
     torch.save(result, './checkpoints/durations.pt')
 
