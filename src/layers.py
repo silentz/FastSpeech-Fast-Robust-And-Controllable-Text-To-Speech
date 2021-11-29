@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 
 
 class MultiHeadSelfAttention(nn.Module):
@@ -129,7 +130,8 @@ class LengthRegulator(nn.Module):
 
     def forward(self, input: torch.Tensor, durations: torch.LongTensor) -> torch.Tensor:
         patched_dur = torch.round(self.alpha * durations).long()
-        result = input.repeat_interleave(patched_dur, dim=1)
+        seq = [x.repeat_interleave(y, dim=0) for x, y in zip(input, patched_dur)]
+        result = pad_sequence(seq, batch_first=True, padding_value=0)
         return result
 
 
