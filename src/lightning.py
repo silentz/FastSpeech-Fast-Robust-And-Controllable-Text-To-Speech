@@ -10,13 +10,15 @@ from typing import (
     Any,
     Dict,
     List,
+    Tuple,
+    Union,
 )
 
 from .aligner import GraphemeAligner
 from .collate import LJSpeechCollator
 from .dataset import LJSpeechDataset
 from .layers import FFTBlock, LengthRegulator, DurationPredictor
-from .mels import MelSpectrogram
+from .mels import MelSpectrogram, MelSpectrogramConfig
 from .positional import PositionalEncoding
 from .vocoder import Vocoder
 
@@ -74,19 +76,15 @@ class Module(pl.LightningModule):
                        dropout: float,
                        conv_hidden_size: int,
                        n_mels: int,
-                       duration_pred_hidden_size: int,
-                       criterion: nn.Module,
-                       optimizer_lr: float,
-                       n_examples: int):
+                       duration_hidden_size: int,
+                       optimizer_lr: float):
         super().__init__()
-        self.criterion = criterion
         self.optimizer_lr = optimizer_lr
-        self.n_examples = n_examples
 
         self.embedding = nn.Embedding(
-                num_embeddings=1,
+                num_embeddings=51,
                 embedding_dim=embedding_dim,
-                padding_idx=1,
+                padding_idx=0,
             )
         self.pos_enc = PositionalEncoding(embedding_dim)
         self.fft_encoder = nn.Sequential(*[
@@ -102,7 +100,7 @@ class Module(pl.LightningModule):
         self.len_reg = LengthRegulator()
         self.dur_pred = DurationPredictor(
                 embedding_dim=embedding_dim,
-                hidden_size=duration_pred_hidden_size,
+                hidden_size=duration_hidden_size,
                 dropout=dropout,
             )
         self.fft_decoder = nn.Sequential(*[
@@ -116,6 +114,10 @@ class Module(pl.LightningModule):
                 for _ in range(decoder_layers)
             ])
         self.linear = nn.Linear(embedding_dim, n_mels)
+
+        self.aligner = GraphemeAligner()
+        self.featurizer = MelSpectrogram(MelSpectrogramConfig())
+        self.vocoder = Vocoder('./checkpoints/vocoder/waveglow_256channels_universal_v5.pt')
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optim = torch.optim.Adam(
@@ -132,8 +134,24 @@ class Module(pl.LightningModule):
                 'scheduler': sched,
             }
 
-    def forward(self, batch) -> torch.Tensor:
-        pass
+    def forward(self, input: torch.Tensor,
+                      durations: Union[torch.Tensor, None] = None) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
+        X = self.embedding(input)
+        X = self.pos_enc(X)
+        X = self.fft_encoder(X)
+        my_durations = self.dur_pred(X)
+
+        if durations is None:
+            durations = my_durations
+            durations = torch.exp(durations)
+            durations = durations.long()
+
+        X = self.len_reg(X, durations)
+        X = self.pos_enc(X)
+        X = self.fft_decoder(X)
+        X = self.linear(X)
+        return X, my_durations
 
     def training_step(self, batch, batch_idx) -> Dict[str, Any]:
        pass
