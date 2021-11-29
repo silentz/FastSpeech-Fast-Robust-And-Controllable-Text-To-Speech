@@ -42,3 +42,28 @@ class PartialDataset(Dataset):
 
     def __len__(self):
         return self.finish_idx - self.start_idx
+
+
+class TestDataset(Dataset):
+
+    def __init__(self):
+        self._lines = [
+            'A defibrillator is a device that gives a high energy electric' \
+                ' shock to the heart of someone who is in cardiac arrest',
+
+            'Massachusetts Institute of Technology may be best known for its' \
+                ' math, science and engineering education',
+
+            'Wasserstein distance or Kantorovich Rubinstein metric is a distance' \
+                ' function defined between probability distributions on a given metric space'
+        ]
+
+        self._tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
+
+    def __len__(self):
+        return len(self._lines)
+
+    def __getitem__(self, idx: int):
+        text = self._lines[idx]
+        tokens, token_lengths = self._tokenizer(text)
+        return tokens, token_lengths, text
