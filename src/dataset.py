@@ -31,7 +31,7 @@ class AdvancedLJSpeechDataset(LJSpeechDataset):
 
     def __init__(self, root, durations_path):
         super().__init__(root)
-        self.durations = torch.load(durations_path)
+        self.durations = torch.load(durations_path, map_location='cpu')
 
     def __getitem__(self, idx: int):
         from_parent = super().__getitem__(idx)
@@ -78,4 +78,4 @@ class TestDataset(Dataset):
     def __getitem__(self, idx: int):
         text = self._lines[idx]
         tokens, token_lengths = self._tokenizer(text)
-        return tokens, token_lengths, text
+        return tokens.squeeze(dim=0), token_lengths, text
