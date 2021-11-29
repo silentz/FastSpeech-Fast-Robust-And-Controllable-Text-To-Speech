@@ -1,6 +1,9 @@
 import warnings
 warnings.filterwarnings('ignore')
 
+import sys
+sys.path.append('waveglow/')
+
 from pytorch_lightning.utilities.cli import LightningCLI
 from pytorch_lightning.loggers import WandbLogger
 
