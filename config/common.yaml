@@ -1,0 +1,68 @@
+seed_everything: 3407
+
+trainer:
+  gpus: 1
+  check_val_every_n_epoch: 1
+  fast_dev_run: false
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.
+  track_grad_norm: 2
+  max_epochs: 10
+  precision: 32
+  num_sanity_val_steps: 2
+  deterministic: true
+  auto_lr_find: false
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.model_checkpoint.ModelCheckpoint
+      init_args:
+        dirpath: checkpoints/model/
+        filename: "{epoch:03d}-{val_mse:.5f}"
+        monitor: "val_mse"
+        mode: "min"
+        save_top_k: -1
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: epoch
+
+model:
+  encoder_layers: 2
+  decoder_layers: 2
+  embedding_dim: 384
+  attention_n_heads: 2
+  attention_head_dim: 384
+  dropout: 0.
+  conv_hidden_size: 384
+  n_mels: 80
+  duration_hidden_size: 1536
+  len_reg_alpha: 1.
+  optimizer_lr: 0.001
+
+data:
+  train_dataset:
+    class_path: src.dataset.PartialDataset
+    init_args:
+      dataset:
+        class_path: src.dataset.LJSpeechDataset
+        init_args:
+          root: 'data/'
+      start_idx: 0
+      finish_idx: 12800
+  train_batch_size: 32
+  train_num_workers: 16
+
+  val_dataset:
+    class_path: src.dataset.PartialDataset
+    init_args:
+      dataset:
+        class_path: src.dataset.LJSpeechDataset
+        init_args:
+          root: 'data/'
+      start_idx: 12800
+      finish_idx: 13100
+  val_batch_size: 32
+  val_num_workers: 16
+
+  test_dataset:
+    class_path: src.dataset.TestDataset
+  test_batch_size: 3
+  test_num_workers: 1
