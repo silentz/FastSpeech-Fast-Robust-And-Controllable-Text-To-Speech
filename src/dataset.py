@@ -27,6 +27,18 @@ class LJSpeechDataset(torchaudio.datasets.LJSPEECH):
         return result
 
 
+class AdvancedLJSpeechDataset(LJSpeechDataset):
+
+    def __init__(self, root, durations_path):
+        super().__init__(root)
+        self.durations = torch.load(durations_path)
+
+    def __getitem__(self, idx: int):
+        from_parent = super().__getitem__(idx)
+        duration = self.durations[idx]
+        return *from_parent, duration
+
+
 class PartialDataset(Dataset):
 
     def __init__(self, dataset: Dataset,
