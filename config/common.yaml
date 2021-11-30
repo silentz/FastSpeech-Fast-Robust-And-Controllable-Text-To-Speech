@@ -6,17 +6,17 @@ trainer:
   fast_dev_run: false
   accumulate_grad_batches: 1
   gradient_clip_val: 1.
-  max_epochs: 10
+  max_epochs: 30
   precision: 32
-  num_sanity_val_steps: 3
+  num_sanity_val_steps: 1
   deterministic: false
   auto_lr_find: false
   callbacks:
     - class_path: pytorch_lightning.callbacks.model_checkpoint.ModelCheckpoint
       init_args:
         dirpath: checkpoints/model/
-        filename: "{epoch:03d}-{train_loss:.5f}"
-        monitor: "train_loss"
+        filename: "{epoch:03d}-{total_loss:.5f}"
+        monitor: "total_loss"
         mode: "min"
         save_top_k: -1
     - class_path: pytorch_lightning.callbacks.LearningRateMonitor
@@ -24,28 +24,51 @@ trainer:
         logging_interval: epoch
 
 model:
-  encoder_layers: 6
-  decoder_layers: 6
+  encoder_layers: 2
+  decoder_layers: 2
   embedding_dim: 384
   attention_n_heads: 2
   attention_head_dim: 384
   dropout: 0.
   conv_hidden_size: 384
   n_mels: 80
-  duration_hidden_size: 1536
+  duration_hidden_size: 384
   len_reg_alpha: 1.
   optimizer_lr: 0.001
 
 data:
   train_dataset:
-    class_path: src.dataset.AdvancedLJSpeechDataset
+    class_path: src.dataset.OverfitDataset
     init_args:
-      root: 'data/'
-      durations_path: ./checkpoints/durations.pt
-  train_batch_size: 32
+      dataset:
+        class_path: src.dataset.AdvancedLJSpeechDataset
+        init_args:
+          root: 'data/'
+          durations_path: ./checkpoints/durations.pt
+      num_samples: 16
+      length: 16000
+  # train_dataset:
+  #   class_path: src.dataset.AdvancedLJSpeechDataset
+  #   init_args:
+  #     root: 'data/'
+  #     durations_path: ./checkpoints/durations.pt
+  train_batch_size: 16
   train_num_workers: 16
 
   val_dataset:
-    class_path: src.dataset.TestDataset
-  val_batch_size: 1
-  val_num_workers: 1
+    class_path: src.dataset.OverfitDataset
+    init_args:
+      dataset:
+        class_path: src.dataset.AdvancedLJSpeechDataset
+        init_args:
+          root: 'data/'
+          durations_path: ./checkpoints/durations.pt
+      num_samples: 16
+      length: 16
+  val_batch_size: 16
+  val_num_workers: 16
+
+  # val_dataset:
+  #   class_path: src.dataset.TestDataset
+  # val_batch_size: 1
+  # val_num_workers: 1

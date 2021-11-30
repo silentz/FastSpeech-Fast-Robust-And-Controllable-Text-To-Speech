@@ -39,6 +39,22 @@ class AdvancedLJSpeechDataset(LJSpeechDataset):
         return *from_parent, duration
 
 
+class OverfitDataset(Dataset):
+
+    def __init__(self, dataset: Dataset,
+                       num_samples: int,
+                       length: int):
+        self.dataset = dataset
+        self.num_samples = num_samples
+        self.length = length
+
+    def __getitem__(self, idx: int):
+        return self.dataset[idx % self.num_samples]
+
+    def __len__(self):
+        return self.length
+
+
 class PartialDataset(Dataset):
 
     def __init__(self, dataset: Dataset,

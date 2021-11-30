@@ -43,6 +43,7 @@ class DataModule(pl.LightningDataModule):
         self.val_dataloader_kwargs = {
                 'batch_size': val_batch_size,
                 'num_workers': val_num_workers,
+                'collate_fn': AdvancedLJSpeechCollator(), # TODO: remove
             }
         #  self.test_dataloader_kwargs = {
         #          'batch_size': test_batch_size,
@@ -161,16 +162,24 @@ class Module(pl.LightningModule):
         durations *= target_mels.shape[1]
 
         out_mels, out_durations = self(batch.tokens, durations)
-        min_length = min(out_mels.shape[1], target_mels.shape[1])
+        max_length = max(out_mels.shape[1], target_mels.shape[1])
 
-        cut_out_mels = out_mels[:, :min_length, :]
-        cut_target_mels = target_mels[:, :min_length, :]
+        def pad_to_max_length(tensor: torch.Tensor) -> torch.Tensor:
+            batch_size, seq_len, n_mels = tensor.shape
+            padded = torch.zeros(batch_size, max_length, n_mels, device=tensor.device)
+            padded[:, :seq_len, :] = tensor
+            return padded
+
+        cut_out_mels = pad_to_max_length(out_mels)
+        cut_target_mels = pad_to_max_length(target_mels)
 
         mels_loss = F.mse_loss(cut_out_mels, cut_target_mels)
         duration_loss = F.mse_loss(out_durations, durations.clamp(min=1e-5).log())
         loss = mels_loss + duration_loss
 
-        self.log('train_loss', loss.item())
+        self.log('mel_loss', mels_loss.item())
+        self.log('duration_loss', duration_loss.item())
+        self.log('total_loss', loss.item())
 
         return {
                 'loss': loss,
@@ -178,27 +187,63 @@ class Module(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx) -> Dict[str, Any]:
-        tokens, _, text = batch
-        out_mels, _ = self(tokens)
+        target_mels = self.featurizer(batch.waveform)
+        target_mels = target_mels.transpose(1, 2)
 
+        #  durations = self.aligner(batch.waveform, batch.waveform_length, batch.transcript)
+        durations = batch.durations
+        durations = durations[:, :batch.tokens.shape[1]]
+        durations *= target_mels.shape[1]
+
+        out_mels, out_durations = self(batch.tokens, durations)
         out_mels = out_mels.transpose(1, 2)
-        audio = self.vocoder.inference(out_mels)
+        wavs = []
+
+        for mel in out_mels:
+            wav = self.vocoder.inference(mel.unsqueeze(dim=0))
+            wavs.append(wav.detach().cpu())
 
         return {
-                'audio': audio[0].detach().cpu(),
-                'text': text[0],
+                'text': batch.transcript,
+                'wavs': wavs,
             }
+
+        #  tokens, _, text = batch
+        #  out_mels, _ = self(tokens)
+
+        #  out_mels = out_mels.transpose(1, 2)
+        #  audio = self.vocoder.inference(out_mels)
+
+        #  return {
+        #          'audio': audio[0].detach().cpu(),
+        #          'text': text[0],
+        #      }
 
 
     def validation_epoch_end(self, outputs: List[Dict[str, Any]]) -> None:
         table_lines = []
+        table_name = f'samples_{self.current_epoch}'
 
-        for pred in outputs:
-            table_lines.append([
-                pred['text'],
-                wandb.Audio(pred['audio'], sample_rate=22050),
-            ])
+        for batch in outputs:
+            texts = batch['text']
+            audios = batch['wavs']
+
+            for text, audio in zip(texts, audios):
+                table_lines.append([
+                    text,
+                    wandb.Audio(audio[0], sample_rate=22050),
+                ])
 
         table = wandb.Table(columns=['text', 'audio'], data=table_lines)
-        self.logger.experiment.log({'samples': table}, commit=True)
+        self.logger.experiment.log({table_name: table}, commit=True)
+        #  table_lines = []
+
+        #  for pred in outputs:
+        #      table_lines.append([
+        #          pred['text'],
+        #          wandb.Audio(pred['audio'], sample_rate=22050),
+        #      ])
+
+        #  table = wandb.Table(columns=['text', 'audio'], data=table_lines)
+        #  self.logger.experiment.log({'samples': table}, commit=True)
 

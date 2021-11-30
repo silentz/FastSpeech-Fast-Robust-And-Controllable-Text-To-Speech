@@ -169,7 +169,6 @@ class DurationPredictor(nn.Module):
                 nn.ReLU(inplace=True),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1),
-                nn.ReLU(inplace=True),
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
