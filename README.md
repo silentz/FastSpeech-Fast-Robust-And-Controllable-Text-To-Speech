@@ -1,4 +1,4 @@
-# FastSpeech TTS model
+## FastSpeech TTS model
 
 Third assignment on DLA (Deep learning in audio) HSE course.
 
