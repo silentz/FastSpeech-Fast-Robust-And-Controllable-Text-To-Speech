@@ -33,7 +33,6 @@ class DataModule(pl.LightningDataModule):
         super().__init__()
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
-        #  self.test_dataset = test_dataset
 
         self.train_dataloader_kwargs = {
                 'batch_size': train_batch_size,
@@ -43,22 +42,13 @@ class DataModule(pl.LightningDataModule):
         self.val_dataloader_kwargs = {
                 'batch_size': val_batch_size,
                 'num_workers': val_num_workers,
-                'collate_fn': AdvancedLJSpeechCollator(), # TODO: remove
             }
-        #  self.test_dataloader_kwargs = {
-        #          'batch_size': test_batch_size,
-        #          'num_workers': test_num_workers,
-        #          'collate_fn': AdvancedLJSpeechCollator(),
-        #      }
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(self.train_dataset, **self.train_dataloader_kwargs)
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(self.val_dataset, **self.val_dataloader_kwargs)
-
-    #  def test_dataloader(self) -> DataLoader:
-    #      return DataLoader(self.test_dataset, **self.test_dataloader_kwargs)
 
 
 
@@ -114,7 +104,6 @@ class Module(pl.LightningModule):
             ])
         self.linear = nn.Linear(embedding_dim, n_mels)
 
-        #  self.aligner = GraphemeAligner()
         self.featurizer = MelSpectrogram(MelSpectrogramConfig())
         self.vocoder = Vocoder('./checkpoints/vocoder/waveglow_256channels_universal_v5.pt')
 
@@ -146,6 +135,10 @@ class Module(pl.LightningModule):
             durations = my_durations
             durations = torch.exp(durations)
 
+            #survive first epochs of training
+            if durations.shape[1] == 0:
+                durations = torch.ones(X.shape[0], X.shape[1], device=X.device)
+
         X = self.len_reg(X, durations)
         X = self.pos_enc(X)
         X = self.fft_decoder(X)
@@ -156,7 +149,6 @@ class Module(pl.LightningModule):
         target_mels = self.featurizer(batch.waveform)
         target_mels = target_mels.transpose(1, 2)
 
-        #  durations = self.aligner(batch.waveform, batch.waveform_length, batch.transcript)
         durations = batch.durations
         durations = durations[:, :batch.tokens.shape[1]]
         durations *= target_mels.shape[1]
@@ -187,63 +179,28 @@ class Module(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx) -> Dict[str, Any]:
-        target_mels = self.featurizer(batch.waveform)
-        target_mels = target_mels.transpose(1, 2)
+        tokens, _, text = batch
+        out_mels, _ = self(tokens)
 
-        #  durations = self.aligner(batch.waveform, batch.waveform_length, batch.transcript)
-        durations = batch.durations
-        durations = durations[:, :batch.tokens.shape[1]]
-        durations *= target_mels.shape[1]
-
-        out_mels, out_durations = self(batch.tokens, durations)
         out_mels = out_mels.transpose(1, 2)
-        wavs = []
-
-        for mel in out_mels:
-            wav = self.vocoder.inference(mel.unsqueeze(dim=0))
-            wavs.append(wav.detach().cpu())
+        audio = self.vocoder.inference(out_mels)
 
         return {
-                'text': batch.transcript,
-                'wavs': wavs,
+                'audio': audio[0].detach().cpu(),
+                'text': text[0],
             }
-
-        #  tokens, _, text = batch
-        #  out_mels, _ = self(tokens)
-
-        #  out_mels = out_mels.transpose(1, 2)
-        #  audio = self.vocoder.inference(out_mels)
-
-        #  return {
-        #          'audio': audio[0].detach().cpu(),
-        #          'text': text[0],
-        #      }
 
 
     def validation_epoch_end(self, outputs: List[Dict[str, Any]]) -> None:
-        table_lines = []
         table_name = f'samples_{self.current_epoch}'
+        table_lines = []
 
-        for batch in outputs:
-            texts = batch['text']
-            audios = batch['wavs']
-
-            for text, audio in zip(texts, audios):
-                table_lines.append([
-                    text,
-                    wandb.Audio(audio[0], sample_rate=22050),
-                ])
+        for pred in outputs:
+            table_lines.append([
+                pred['text'],
+                wandb.Audio(pred['audio'], sample_rate=22050),
+            ])
 
         table = wandb.Table(columns=['text', 'audio'], data=table_lines)
         self.logger.experiment.log({table_name: table}, commit=True)
-        #  table_lines = []
-
-        #  for pred in outputs:
-        #      table_lines.append([
-        #          pred['text'],
-        #          wandb.Audio(pred['audio'], sample_rate=22050),
-        #      ])
-
-        #  table = wandb.Table(columns=['text', 'audio'], data=table_lines)
-        #  self.logger.experiment.log({'samples': table}, commit=True)
 
