@@ -24,8 +24,8 @@ trainer:
         logging_interval: epoch
 
 model:
-  encoder_layers: 2
-  decoder_layers: 2
+  encoder_layers: 6
+  decoder_layers: 6
   embedding_dim: 384
   attention_n_heads: 2
   attention_head_dim: 384
