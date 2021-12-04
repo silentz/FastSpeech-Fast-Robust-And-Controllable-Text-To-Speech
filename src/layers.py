@@ -74,9 +74,11 @@ class ConvBlock(nn.Module):
         super().__init__()
 
         self._layers = nn.Sequential(
-                nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                #  nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                nn.Linear(input_size, hidden_size, bias=True),
                 nn.ReLU(inplace=True),
-                nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
+                nn.Linear(hidden_size, input_size, bias=True),
+                #  nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
             )
 
         self._norm = nn.LayerNorm(input_size)
@@ -84,9 +86,10 @@ class ConvBlock(nn.Module):
 
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        X = input.transpose(1, 2)
+        #  X = input.transpose(1, 2)
+        X = input
         X = self._layers(X)
-        X = X.transpose(1, 2)
+        #  X = X.transpose(1, 2)
         X = self._dropout(X)
         result = self._norm(input + X)
         return result
@@ -139,6 +142,7 @@ class LengthRegulator(nn.Module):
 
     def forward(self, input: torch.Tensor, durations: torch.LongTensor) -> torch.Tensor:
         patched_dur = torch.round(self.alpha * durations).long()
+        patched_dur[patched_dur < 0] = 0
         seq = [x.repeat_interleave(y, dim=0) for x, y in zip(input, patched_dur)]
         result = pad_sequence(seq, batch_first=True, padding_value=0)
 
@@ -183,7 +187,6 @@ class DurationPredictor(nn.Module):
                 nn.LayerNorm(hidden_size),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1),
-                nn.ReLU(inplace=True),
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:

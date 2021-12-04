@@ -136,6 +136,7 @@ class Module(pl.LightningModule):
 
         if durations is None:
             durations = my_durations
+            durations = torch.exp(durations)
 
         X = self.len_reg(X, durations)
         X = self.pos_enc(X)
@@ -166,8 +167,8 @@ class Module(pl.LightningModule):
         cut_out_mels = pad_to_max_length(out_mels)
         cut_target_mels = pad_to_max_length(target_mels)
 
-        mels_loss = F.l1_loss(cut_out_mels, cut_target_mels)
-        duration_loss = F.mse_loss(out_durations, durations)
+        mels_loss = F.mse_loss(cut_out_mels, cut_target_mels)
+        duration_loss = F.mse_loss(out_durations, durations.clamp(min=1e-3).log())
         loss = mels_loss + duration_loss
 
         self.log('mel_loss', mels_loss.item())
