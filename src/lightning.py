@@ -74,7 +74,7 @@ class Module(pl.LightningModule):
                 padding_idx=0,
             )
         self.pos_enc = PositionalEncoding(embedding_dim)
-        self.fft_encoder = nn.Sequential(*[
+        self.fft_encoder = nn.ModuleList([
                 FFTBlock(
                         embedding_dim=embedding_dim,
                         attention_n_heads=attention_n_heads,
@@ -92,7 +92,7 @@ class Module(pl.LightningModule):
                 hidden_size=duration_hidden_size,
                 dropout=dropout,
             )
-        self.fft_decoder = nn.Sequential(*[
+        self.fft_decoder = nn.ModuleList([
                 FFTBlock(
                         embedding_dim=embedding_dim,
                         attention_n_heads=attention_n_heads,
@@ -112,7 +112,7 @@ class Module(pl.LightningModule):
                 self.parameters(),
                 lr=self.optimizer_lr,
                 betas=(0.9, 0.98),
-                weight_decay=1e-6,
+                eps=1e-9,
             )
         sched = torch.optim.lr_scheduler.LambdaLR(
                 optim,
@@ -128,20 +128,21 @@ class Module(pl.LightningModule):
             -> Tuple[torch.Tensor, torch.Tensor]:
         X = self.embedding(input)
         X = self.pos_enc(X)
-        X = self.fft_encoder(X)
+
+        for enc_layer in self.fft_encoder:
+            X = enc_layer(X)
+
         my_durations = self.dur_pred(X)
 
         if durations is None:
             durations = my_durations
-            durations = torch.exp(durations)
-
-            #survive first epochs of training
-            if durations.shape[1] == 0:
-                durations = torch.ones(X.shape[0], X.shape[1], device=X.device)
 
         X = self.len_reg(X, durations)
         X = self.pos_enc(X)
-        X = self.fft_decoder(X)
+
+        for dec_layer in self.fft_decoder:
+            X = dec_layer(X)
+
         X = self.linear(X)
         return X, my_durations
 
@@ -166,7 +167,7 @@ class Module(pl.LightningModule):
         cut_target_mels = pad_to_max_length(target_mels)
 
         mels_loss = F.l1_loss(cut_out_mels, cut_target_mels)
-        duration_loss = F.mse_loss(out_durations, durations.clamp(min=1e-5).log())
+        duration_loss = F.mse_loss(out_durations, durations)
         loss = mels_loss + duration_loss
 
         self.log('mel_loss', mels_loss.item())

@@ -21,7 +21,7 @@ class MultiHeadSelfAttention(nn.Module):
         self._key    = nn.Linear(embedding_dim, head_dim * n_heads, bias=False)
         self._value  = nn.Linear(embedding_dim, head_dim * n_heads, bias=False)
         self._concat = nn.Linear(n_heads * head_dim, embedding_dim, bias=False)
-        self._norm   = nn.LayerNorm(embedding_dim)
+        self._norm   = nn.LayerNorm(embedding_dim, eps=1e-6)
         self._scale  = math.sqrt(head_dim)
 
         self._layer_dropout = nn.Dropout(dropout)
@@ -134,6 +134,11 @@ class LengthRegulator(nn.Module):
         patched_dur = torch.round(self.alpha * durations).long()
         seq = [x.repeat_interleave(y, dim=0) for x, y in zip(input, patched_dur)]
         result = pad_sequence(seq, batch_first=True, padding_value=0)
+
+        #survive first epochs of training
+        if result.shape[1] == 0:
+            result = input
+
         return result
 
 
@@ -171,6 +176,7 @@ class DurationPredictor(nn.Module):
                 nn.LayerNorm(hidden_size),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1),
+                nn.ReLU(inplace=True),
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
