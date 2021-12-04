@@ -110,6 +110,12 @@ class FFTBlock(nn.Module):
                 dropout=dropout,
             )
 
+        #  self._attention = nn.MultiheadAttention(
+        #          embed_dim=embedding_dim,
+        #          num_heads=attention_n_heads,
+        #          dropout=dropout,
+        #      )
+
         self._conv = ConvBlock(
                 input_size=embedding_dim,
                 hidden_size=conv_hidden_size,
@@ -120,6 +126,7 @@ class FFTBlock(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         stage_1 = self._attention(input)
+        #  stage_1, _ = self._attention(input, input, input)
         stage_2 = self._conv(stage_1)
         return stage_2
 
