@@ -16,7 +16,7 @@ from typing import (
 )
 
 from .collate import AdvancedLJSpeechCollator, Batch
-from .layers import FFTBlock, LengthRegulator, DurationPredictor, Linear
+from .layers import FFTBlock, LengthRegulator, DurationPredictor
 from .mels import MelSpectrogram, MelSpectrogramConfig
 from .positional import PositionalEncoding
 from .vocoder import Vocoder
@@ -102,7 +102,7 @@ class Module(pl.LightningModule):
                     )
                 for _ in range(decoder_layers)
             ])
-        self.linear = Linear(embedding_dim, n_mels)
+        self.linear = nn.Linear(embedding_dim, n_mels)
 
         self.featurizer = MelSpectrogram(MelSpectrogramConfig())
         self.vocoder = Vocoder('./checkpoints/vocoder/waveglow_256channels_universal_v5.pt')

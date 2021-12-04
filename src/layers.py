@@ -5,20 +5,6 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 
-class Linear(nn.Linear):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        nn.init.xavier_uniform_(self.weight)
-
-
-class Conv1d(nn.Conv1d):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        nn.init.xavier_uniform_(self.weight)
-
-
 class MultiHeadSelfAttention(nn.Module):
 
     def __init__(self, embedding_dim: int,
@@ -31,14 +17,15 @@ class MultiHeadSelfAttention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = head_dim
 
-        self._query   = Linear(embedding_dim, head_dim * n_heads)
-        self._key     = Linear(embedding_dim, head_dim * n_heads)
-        self._value   = Linear(embedding_dim, head_dim * n_heads)
-        self._concat  = Linear(n_heads * head_dim, embedding_dim)
-        self._norm    = nn.LayerNorm(embedding_dim)
-        self._dropout = nn.Dropout(dropout)
-        self._scale   = math.sqrt(head_dim)
+        self._query  = nn.Linear(embedding_dim, head_dim * n_heads, bias=False)
+        self._key    = nn.Linear(embedding_dim, head_dim * n_heads, bias=False)
+        self._value  = nn.Linear(embedding_dim, head_dim * n_heads, bias=False)
+        self._concat = nn.Linear(n_heads * head_dim, embedding_dim, bias=False)
+        self._norm   = nn.LayerNorm(embedding_dim)
+        self._scale  = math.sqrt(head_dim)
 
+        self._layer_dropout = nn.Dropout(dropout)
+        self._attention_dropout = nn.Dropout(dropout)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, _ = input.shape
@@ -66,11 +53,12 @@ class MultiHeadSelfAttention(nn.Module):
         key_T = key.transpose(2, 3)                             # batch, n_heads, head_dim, seq
         attention = torch.matmul(query, key_T)                  # batch, n_heads, seq, seq
         attention = F.softmax(attention / self._scale, dim=3)   # batch, n_heads, seq, seq
+        attention = self._attention_dropout(attention)          # batch, n_heads, seq, seq
         mixture = torch.matmul(attention, value)                # batch, n_heads, seq, head_dim
         mixture = mixture.transpose(1, 2)                       # batch, seq, n_heads, head_dim
         mixture = mixture.reshape(batch_size, seq_len, -1)      # batch, seq, n_heads * head_dim
         mixture = self._concat(mixture)                         # batch, seq, dim
-        mixture = self._dropout(mixture)                        # batch, seq, dim
+        mixture = self._layer_dropout(mixture)                  # batch, seq, dim
 
         result = self._norm(mixture + input)
         return result
@@ -86,9 +74,9 @@ class ConvBlock(nn.Module):
         super().__init__()
 
         self._layers = nn.Sequential(
-                Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
                 nn.ReLU(inplace=True),
-                Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
+                nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
             )
 
         self._norm = nn.LayerNorm(input_size)
@@ -171,18 +159,18 @@ class DurationPredictor(nn.Module):
 
         self._layers = nn.Sequential(
                 Transpose(1, 2),
-                Conv1d(embedding_dim, hidden_size, kernel_size_1, padding='same'),
+                nn.Conv1d(embedding_dim, hidden_size, kernel_size_1, padding='same'),
                 Transpose(1, 2),
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
                 Transpose(1, 2),
                 nn.Dropout(dropout),
-                Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
+                nn.Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
                 Transpose(1, 2),
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
                 nn.Dropout(dropout),
-                Linear(hidden_size, 1),
+                nn.Linear(hidden_size, 1),
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
