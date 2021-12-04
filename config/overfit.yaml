@@ -7,7 +7,7 @@ trainer:
   accumulate_grad_batches: 2
   # gradient_clip_val: 1.
   track_grad_norm: 1
-  max_epochs: 150
+  max_epochs: 100
   precision: 32
   num_sanity_val_steps: 3
   deterministic: false
@@ -35,18 +35,48 @@ model:
   n_mels: 80
   duration_hidden_size: 256
   len_reg_alpha: 1.
-  optimizer_lr: 0.0001
+  optimizer_lr: 0.001
 
 data:
   train_dataset:
-    class_path: src.dataset.AdvancedLJSpeechDataset
+    class_path: src.dataset.OverfitDataset
     init_args:
-      root: 'data/'
-      durations_path: ./checkpoints/durations.pt
+      dataset:
+        class_path: src.dataset.AdvancedLJSpeechDataset
+        init_args:
+          root: 'data/'
+          durations_path: ./checkpoints/durations.pt
+      num_samples: 16
+      length: 1600
   train_batch_size: 16
   train_num_workers: 16
 
   val_dataset:
-    class_path: src.dataset.TestDataset
+    class_path: src.dataset.OverfitDataset
+    init_args:
+      dataset:
+        class_path: src.dataset.TestLJSpeechDataset
+        init_args:
+          root: 'data/'
+      num_samples: 3
+      length: 3
   val_batch_size: 1
   val_num_workers: 1
+
+  # val_dataset:
+  #   class_path: src.dataset.OverfitDataset
+  #   init_args:
+  #     dataset:
+  #       class_path: src.dataset.AdvancedLJSpeechDataset
+  #       init_args:
+  #         root: 'data/'
+  #         durations_path: ./checkpoints/durations.pt
+  #     num_samples: 16
+  #     length: 16
+  # val_batch_size: 16
+  # val_num_workers: 16
+
+  # val_dataset:
+  #   class_path: src.dataset.TestDataset
+  # val_batch_size: 1
+  # val_num_workers: 1

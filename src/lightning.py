@@ -42,6 +42,7 @@ class DataModule(pl.LightningDataModule):
         self.val_dataloader_kwargs = {
                 'batch_size': val_batch_size,
                 'num_workers': val_num_workers,
+                #  'collate_fn': AdvancedLJSpeechCollator(),
             }
 
     def train_dataloader(self) -> DataLoader:
@@ -148,15 +149,15 @@ class Module(pl.LightningModule):
         return X, my_durations
 
     def training_step(self, batch: Batch, batch_idx: int) -> Dict[str, Any]:
-        target_mels = self.featurizer(batch.waveform)
-        target_mels = target_mels.transpose(1, 2)
+        mels = self.featurizer(batch.waveform)
+        mels = mels.transpose(1, 2)
 
         durations = batch.durations
         durations = durations[:, :batch.tokens.shape[1]]
-        durations *= target_mels.shape[1]
+        durations *= mels.shape[1]
 
         out_mels, out_durations = self(batch.tokens, durations)
-        max_length = max(out_mels.shape[1], target_mels.shape[1])
+        max_length = max(out_mels.shape[1], mels.shape[1])
 
         def pad_to_max_length(tensor: torch.Tensor) -> torch.Tensor:
             batch_size, seq_len, n_mels = tensor.shape
@@ -165,10 +166,26 @@ class Module(pl.LightningModule):
             return padded
 
         cut_out_mels = pad_to_max_length(out_mels)
-        cut_target_mels = pad_to_max_length(target_mels)
+        cut_mels = pad_to_max_length(mels)
 
-        mels_loss = F.mse_loss(cut_out_mels, cut_target_mels)
-        duration_loss = F.mse_loss(out_durations, durations.clamp(min=1e-3).log())
+        def get_mask(length):
+            max_len = torch.max(length).item()
+            ids = torch.arange(0, max_len, device=length.device)
+            mask = (length.unsqueeze(1) <= ids).to(torch.bool)
+            return ~mask
+
+        max_wave_len = torch.max(batch.waveform_length).item()
+        duration_mask = get_mask(batch.token_lengths)
+        mel_mask = get_mask(batch.waveform_length / max_wave_len * max_length)
+
+        pred_mels = cut_out_mels.masked_select(mel_mask.unsqueeze(dim=2))
+        targ_mels = cut_mels.masked_select(mel_mask.unsqueeze(dim=2))
+
+        pred_dur = out_durations.masked_select(duration_mask)
+        targ_dur = durations.log().clamp(min=0).masked_select(duration_mask)
+
+        mels_loss = F.mse_loss(pred_mels, targ_mels)
+        duration_loss = F.mse_loss(pred_dur, targ_dur)
         loss = mels_loss + duration_loss
 
         self.log('mel_loss', mels_loss.item())
@@ -179,6 +196,45 @@ class Module(pl.LightningModule):
                 'loss': loss,
             }
 
+    #  def validation_step(self, batch, batch_idx) -> Dict[str, Any]:
+    #      target_mels = self.featurizer(batch.waveform)
+    #      target_mels = target_mels.transpose(1, 2)
+
+    #      #  durations = self.aligner(batch.waveform, batch.waveform_length, batch.transcript)
+    #      durations = batch.durations
+    #      durations = durations[:, :batch.tokens.shape[1]]
+    #      durations *= target_mels.shape[1]
+
+    #      out_mels, out_durations = self(batch.tokens, durations)
+    #      out_mels = out_mels.transpose(1, 2)
+    #      wavs = []
+
+    #      for mel in out_mels:
+    #          wav = self.vocoder.inference(mel.unsqueeze(dim=0))
+    #          wavs.append(wav.detach().cpu())
+
+    #      return {
+    #              'text': batch.transcript,
+    #              'wavs': wavs,
+    #          }
+
+
+    #  def validation_epoch_end(self, outputs: List[Dict[str, Any]]) -> None:
+    #      table_lines = []
+    #      table_name = f'samples_{self.current_epoch}'
+
+    #      for batch in outputs:
+    #          texts = batch['text']
+    #          audios = batch['wavs']
+
+    #          for text, audio in zip(texts, audios):
+    #              table_lines.append([
+    #                  text,
+    #                  wandb.Audio(audio[0], sample_rate=22050),
+    #              ])
+
+    #      table = wandb.Table(columns=['text', 'audio'], data=table_lines)
+    #      self.logger.experiment.log({table_name: table}, commit=True)
 
     def validation_step(self, batch, batch_idx) -> Dict[str, Any]:
         tokens, _, text = batch

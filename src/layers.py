@@ -74,11 +74,11 @@ class ConvBlock(nn.Module):
         super().__init__()
 
         self._layers = nn.Sequential(
-                #  nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
-                nn.Linear(input_size, hidden_size, bias=True),
+                nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                #  nn.Linear(input_size, hidden_size, bias=True),
                 nn.ReLU(inplace=True),
-                nn.Linear(hidden_size, input_size, bias=True),
-                #  nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
+                #  nn.Linear(hidden_size, input_size, bias=True),
+                nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
             )
 
         self._norm = nn.LayerNorm(input_size)
@@ -86,10 +86,10 @@ class ConvBlock(nn.Module):
 
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        #  X = input.transpose(1, 2)
-        X = input
+        X = input.transpose(1, 2)
+        #  X = input
         X = self._layers(X)
-        #  X = X.transpose(1, 2)
+        X = X.transpose(1, 2)
         X = self._dropout(X)
         result = self._norm(input + X)
         return result
