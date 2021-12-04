@@ -5,6 +5,20 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 
+class Linear(nn.Linear):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        nn.init.xavier_uniform_(self.weight)
+
+
+class Conv1d(nn.Conv1d):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        nn.init.xavier_uniform_(self.weight)
+
+
 class MultiHeadSelfAttention(nn.Module):
 
     def __init__(self, embedding_dim: int,
@@ -17,10 +31,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.n_heads = n_heads
         self.head_dim = head_dim
 
-        self._query   = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._key     = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._value   = nn.Linear(embedding_dim, head_dim * n_heads)
-        self._concat  = nn.Linear(n_heads * head_dim, embedding_dim)
+        self._query   = Linear(embedding_dim, head_dim * n_heads)
+        self._key     = Linear(embedding_dim, head_dim * n_heads)
+        self._value   = Linear(embedding_dim, head_dim * n_heads)
+        self._concat  = Linear(n_heads * head_dim, embedding_dim)
         self._norm    = nn.LayerNorm(embedding_dim)
         self._dropout = nn.Dropout(dropout)
         self._scale   = math.sqrt(head_dim)
@@ -37,14 +51,14 @@ class MultiHeadSelfAttention(nn.Module):
 
         # [batch, seq, n_heads * head_dim]
 
-        query = query.reshape(-1, seq_len, self.n_heads, self.head_dim)
-        key   = key.reshape(-1, seq_len, self.n_heads, self.head_dim)
-        value = value.reshape(-1, seq_len, self.n_heads, self.head_dim)
+        query = query.reshape(batch_size, seq_len, self.n_heads, self.head_dim)
+        key   =   key.reshape(batch_size, seq_len, self.n_heads, self.head_dim)
+        value = value.reshape(batch_size, seq_len, self.n_heads, self.head_dim)
 
         # [batch, seq, n_heads, head_dim]
 
         query = query.transpose(1, 2)
-        key   = key.transpose(1, 2)
+        key   =   key.transpose(1, 2)
         value = value.transpose(1, 2)
 
         # [batch, n_heads, seq, head_dim]
@@ -72,9 +86,9 @@ class ConvBlock(nn.Module):
         super().__init__()
 
         self._layers = nn.Sequential(
-                nn.Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
+                Conv1d(input_size, hidden_size, kernel_size=kernel_size_1, padding='same'),
                 nn.ReLU(inplace=True),
-                nn.Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
+                Conv1d(hidden_size, input_size, kernel_size=kernel_size_2, padding='same'),
             )
 
         self._norm = nn.LayerNorm(input_size)
@@ -157,18 +171,18 @@ class DurationPredictor(nn.Module):
 
         self._layers = nn.Sequential(
                 Transpose(1, 2),
-                nn.Conv1d(embedding_dim, hidden_size, kernel_size_1, padding='same'),
+                Conv1d(embedding_dim, hidden_size, kernel_size_1, padding='same'),
                 Transpose(1, 2),
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
                 Transpose(1, 2),
                 nn.Dropout(dropout),
-                nn.Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
+                Conv1d(hidden_size, hidden_size, kernel_size_2, padding='same'),
                 Transpose(1, 2),
                 nn.LayerNorm(hidden_size),
                 nn.ReLU(inplace=True),
                 nn.Dropout(dropout),
-                nn.Linear(hidden_size, 1),
+                Linear(hidden_size, 1),
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
