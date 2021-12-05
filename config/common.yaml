@@ -7,7 +7,7 @@ trainer:
   accumulate_grad_batches: 2
   # gradient_clip_val: 1.
   track_grad_norm: 1
-  max_epochs: 800
+  max_epochs: 310
   precision: 32
   num_sanity_val_steps: 3
   deterministic: false
