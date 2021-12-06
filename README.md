@@ -2,6 +2,10 @@
 
 Third assignment on DLA (Deep learning in audio) HSE course.
 
+### Loss
+
+<img src='images/loss.png' width="1000">
+
 ### Reproduce model
 
 1. Clone repository:
