@@ -2,16 +2,40 @@
 
 Third assignment on DLA (Deep learning in audio) HSE course.
 
-### Train
+### Reproduce model
 
-Overfit model on one batch:
-
+1. Clone repository:
 ```bash
-pip3 install -r requirements.txt -f https://download.pytorch.org/whl/cu113/torch_stable.html
-python3 make_durations.py
-python3 trainer.py fit --config config/common.yaml
+git clone git@github.com:silentz/tts.git
 ```
 
-### Loss
+2. Cd into repository root:
+```bash
+cd tts
+```
 
-<img src='images/loss.png' width='600'>
+3. Create and activate virtualenv:
+```bash
+virtualenv --python=python3 venv
+source venv/bin/activate
+```
+
+4. Install required packages:
+```bash
+pip install -r requirements.txt
+```
+
+5. Run init script (quite long operation):
+```bash
+./init.sh
+```
+
+6. Train model:
+```bash
+./train.sh
+```
+
+7. Test model:
+```bash
+./test.sh
+```
